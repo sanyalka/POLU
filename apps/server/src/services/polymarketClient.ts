@@ -65,7 +65,7 @@ export class PolymarketClient {
       headers: this.authHeaders()
     });
 
-    if (response.status === 401) {
+    if (response.status === 401 || response.status === 404) {
       return null;
     }
 
