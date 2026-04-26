@@ -76,7 +76,7 @@ export class TradingEngine {
 
   private async refreshBalance(): Promise<void> {
     try {
-      this.state.accountBalanceUsd = await this.polymarketClient.getBalanceUsd(this.state.settings.funder);
+      this.state.accountBalanceUsd = await this.polymarketClient.getBalanceUsd(this.state.settings);
       this.state.lastPolymarketError = null;
     } catch (error) {
       this.handlePolymarketError(error);
