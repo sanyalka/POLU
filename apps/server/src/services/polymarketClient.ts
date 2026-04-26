@@ -79,13 +79,20 @@ export class PolymarketClient {
     url.searchParams.set("maker", wallet);
     url.searchParams.set("limit", "50");
 
-    const response = await fetch(url, {
-      method: "GET",
-      headers: this.authHeaders()
-    });
+    // Public trade feed should work without auth headers.
+    // This keeps copy-trading alive even if API creds for private endpoints are missing.
+    let response = await fetch(url, { method: "GET" });
+
+    if (!response.ok && response.status !== 401) {
+      throw new Error(`Failed to fetch target wallet trades: ${response.status}`);
+    }
 
     if (response.status === 401) {
-      return [];
+      // Some gateways may still require auth; retry with credentials if present.
+      response = await fetch(url, {
+        method: "GET",
+        headers: this.authHeaders()
+      });
     }
 
     if (!response.ok) {

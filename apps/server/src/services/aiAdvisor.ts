@@ -36,6 +36,11 @@ export class AiAdvisor {
       })
     });
 
+    // Invalid/expired key should not break bot loop.
+    if (response.status === 401 || response.status === 403) {
+      return [];
+    }
+
     if (!response.ok) {
       throw new Error(`AI API request failed: ${response.status}`);
     }
