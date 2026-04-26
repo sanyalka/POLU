@@ -12,6 +12,7 @@ const defaultSettings: BotSettings = {
   copyAmountUsd: 20,
   pollIntervalMs: 15000,
   maxExposureUsd: 500,
+  minBalanceUsd: 10,
   executionMode: "SIMULATION",
   signatureType: 1,
   funder: ""
@@ -29,10 +30,7 @@ const defaultState: BotState = {
 
 function readDraftFromStorage(): BotSettings {
   const raw = localStorage.getItem(DRAFT_KEY);
-  if (!raw) {
-    return defaultSettings;
-  }
-
+  if (!raw) return defaultSettings;
   try {
     return { ...defaultSettings, ...(JSON.parse(raw) as Partial<BotSettings>) };
   } catch {
@@ -52,12 +50,10 @@ export function App() {
   const loadState = async () => {
     try {
       const res = await fetch(`${API_URL}/state`);
-      if (!res.ok) {
-        throw new Error(`state request failed (${res.status})`);
-      }
+      if (!res.ok) throw new Error(`state request failed (${res.status})`);
       const json = (await res.json()) as BotState;
       setState(json);
-      setDraft((prev) => ({ ...json.settings, ...prev }));
+      setDraft((prev) => ({ ...prev, ...json.settings }));
       setOffline(false);
       setError(null);
       setLastSyncAt(new Date().toISOString());
@@ -84,9 +80,7 @@ export function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(patch)
       });
-      if (!res.ok) {
-        throw new Error(`settings request failed (${res.status})`);
-      }
+      if (!res.ok) throw new Error(`settings request failed (${res.status})`);
       const json = (await res.json()) as BotState;
       setState(json);
       setDraft(json.settings);
@@ -102,9 +96,7 @@ export function App() {
   const runManualTick = async () => {
     try {
       const res = await fetch(`${API_URL}/tick`, { method: "POST" });
-      if (!res.ok) {
-        throw new Error(`tick request failed (${res.status})`);
-      }
+      if (!res.ok) throw new Error(`tick request failed (${res.status})`);
       await loadState();
     } catch (err) {
       setOffline(true);
@@ -116,181 +108,161 @@ export function App() {
     await patchSettings(draft);
   };
 
+  const mainStatus = state.settings.enabled ? "running" : "stopped";
+  const balance = state.accountBalanceUsd === null ? "N/A" : `$${state.accountBalanceUsd.toFixed(2)}`;
+
   return (
     <main className="layout">
       <header className="hero">
-        <div>
-          <h1>POLU Console</h1>
-          <p>Polymarket bot: AI trading + copy trading + proxy signature type support.</p>
+        <div className="hero-title">
+          <h1>POLU</h1>
+          <span className={`badge ${mainStatus}`}>{mainStatus.toUpperCase()}</span>
         </div>
-        <div className="hero-actions">
-          <button className="primary" onClick={() => void patchSettings({ enabled: !state.settings.enabled })}>
-            {state.settings.enabled ? "Stop bot" : "Start bot"}
-          </button>
-          <button className="secondary" onClick={() => void runManualTick()}>
-            Manual tick
-          </button>
+        <div className="hero-right">
+          {lastSyncAt && !isOffline && (
+            <span className="sync-time">{new Date(lastSyncAt).toLocaleTimeString()}</span>
+          )}
+          <div className="hero-actions">
+            <button className={state.settings.enabled ? "danger" : "primary"} onClick={() => void patchSettings({ enabled: !state.settings.enabled })}>
+              {state.settings.enabled ? "Stop" : "Start"}
+            </button>
+            <button className="secondary" onClick={() => void runManualTick()}>Tick</button>
+          </div>
         </div>
       </header>
 
       {(isOffline || error) && (
-        <section className="alert error">
-          <strong>Backend not reachable.</strong>
-          <p>
-            Проверьте запуск server (`npm run dev -w apps/server`) или задайте `VITE_API_URL`. Локальный draft сохраняется в браузере,
-            но в API пока не отправляется.
-          </p>
+        <div className="alert error">
+          <strong>Backend not reachable</strong>
           {error && <code>{error}</code>}
-        </section>
+        </div>
       )}
 
       {state.lastPolymarketError && (
-        <section className="alert error">
-          <strong>Polymarket API warning</strong>
+        <div className="alert error">
+          <strong>API warning</strong>
           <code>{state.lastPolymarketError}</code>
-        </section>
+        </div>
       )}
 
-      {lastSyncAt && !isOffline && (
-        <section className="alert success">
-          <span>Synced with backend: {new Date(lastSyncAt).toLocaleString()}</span>
-        </section>
-      )}
+      <div className="dashboard">
+        <div className="col-left">
+          <div className="stats-row">
+            <div className="stat">
+              <span>Balance</span>
+              <strong>{balance}</strong>
+            </div>
+            <div className="stat">
+              <span>Exposure</span>
+              <strong>${exposure.toFixed(2)}</strong>
+            </div>
+            <div className="stat">
+              <span>Mode</span>
+              <strong>{draft.executionMode}</strong>
+            </div>
+            <div className="stat">
+              <span>Copied</span>
+              <strong>{state.copiedPositionKeys.length}</strong>
+            </div>
+          </div>
 
-      <section className="stats-grid">
-        <article className="stat-card">
-          <span>Status</span>
-          <strong>{state.settings.enabled ? "RUNNING" : "STOPPED"}</strong>
-        </article>
-        <article className="stat-card">
-          <span>Execution mode</span>
-          <strong>{draft.executionMode}</strong>
-        </article>
-        <article className="stat-card">
-          <span>Total exposure</span>
-          <strong>${exposure.toFixed(2)}</strong>
-        </article>
-        <article className="stat-card">
-          <span>Copied positions tracked</span>
-          <strong>{state.copiedPositionKeys.length}</strong>
-        </article>
-        <article className="stat-card">
-          <span>Balance (USD)</span>
-          <strong>{state.accountBalanceUsd === null ? "N/A" : `$${state.accountBalanceUsd.toFixed(2)}`}</strong>
-        </article>
-      </section>
-
-      <section className="panel">
-        <h2>Trading settings</h2>
-        <div className="grid two">
-          <label>
-            Poll interval (ms)
-            <input
-              type="number"
-              value={draft.pollIntervalMs}
-              onChange={(e) => setDraft({ ...draft, pollIntervalMs: Number(e.target.value) })}
-            />
-          </label>
-          <label>
-            Max exposure ($)
-            <input
-              type="number"
-              value={draft.maxExposureUsd}
-              onChange={(e) => setDraft({ ...draft, maxExposureUsd: Number(e.target.value) })}
-            />
-          </label>
-          <label>
-            Execution mode
-            <select
-              value={draft.executionMode}
-              onChange={(e) => setDraft({ ...draft, executionMode: e.target.value as BotSettings["executionMode"] })}
-            >
-              <option value="SIMULATION">SIMULATION</option>
-              <option value="LIVE">LIVE</option>
-            </select>
-          </label>
-          <label>
-            Signature type
-            <select
-              value={draft.signatureType}
-              onChange={(e) => setDraft({ ...draft, signatureType: Number(e.target.value) as BotSettings["signatureType"] })}
-            >
-              <option value={0}>0 — EOA</option>
-              <option value={1}>1 — Proxy / Magic login</option>
-              <option value={2}>2 — Browser wallet delegated</option>
-            </select>
-          </label>
-          <label className="full">
-            Funder (for signature_type=1)
-            <input
-              value={draft.funder}
-              onChange={(e) => setDraft({ ...draft, funder: e.target.value })}
-              placeholder="0x proxy/funder address"
-            />
-          </label>
-        </div>
-      </section>
-
-      <section className="panel">
-        <h2>Strategies</h2>
-        <div className="grid two">
-          <article className="strategy">
-            <h3>Copy trading</h3>
-            <label>
-              Target wallet
-              <input
-                value={draft.copyTargetWallet}
-                onChange={(e) => setDraft({ ...draft, copyTargetWallet: e.target.value })}
-                placeholder="0x..."
-              />
+          <div className="card">
+            <h3>Settings</h3>
+            <div className="form-row">
+              <label>Interval (ms)
+                <input type="number" value={draft.pollIntervalMs} onChange={(e) => setDraft({ ...draft, pollIntervalMs: Number(e.target.value) })} />
+              </label>
+              <label>Max exposure ($)
+                <input type="number" value={draft.maxExposureUsd} onChange={(e) => setDraft({ ...draft, maxExposureUsd: Number(e.target.value) })} />
+              </label>
+            </div>
+            <div className="form-row">
+              <label>Min balance ($)
+                <input type="number" value={draft.minBalanceUsd} onChange={(e) => setDraft({ ...draft, minBalanceUsd: Number(e.target.value) })} />
+              </label>
+              <label>Mode
+                <select value={draft.executionMode} onChange={(e) => setDraft({ ...draft, executionMode: e.target.value as BotSettings["executionMode"] })}>
+                  <option value="SIMULATION">SIMULATION</option>
+                  <option value="LIVE">LIVE</option>
+                </select>
+              </label>
+            </div>
+            <div className="form-row">
+              <label>Sig type
+                <select value={draft.signatureType} onChange={(e) => setDraft({ ...draft, signatureType: Number(e.target.value) as BotSettings["signatureType"] })}>
+                  <option value="0">EOA</option>
+                  <option value="1">Proxy</option>
+                  <option value="2">Delegated</option>
+                </select>
+              </label>
+            </div>
+            <label>Funder
+              <input value={draft.funder} onChange={(e) => setDraft({ ...draft, funder: e.target.value })} placeholder="0x..." />
             </label>
-            <label>
-              Amount per copied trade ($)
-              <input
-                type="number"
-                value={draft.copyAmountUsd}
-                onChange={(e) => setDraft({ ...draft, copyAmountUsd: Number(e.target.value) })}
-              />
-            </label>
-            <button className="secondary" onClick={() => void patchSettings({ copyTradingEnabled: !state.settings.copyTradingEnabled })}>
-              {state.settings.copyTradingEnabled ? "Disable copy strategy" : "Enable copy strategy"}
-            </button>
-          </article>
+          </div>
 
-          <article className="strategy">
-            <h3>AI strategy</h3>
-            <p>Uses OpenAI-compatible endpoint to propose conservative instructions.</p>
-            <button className="secondary" onClick={() => void patchSettings({ aiTradingEnabled: !state.settings.aiTradingEnabled })}>
-              {state.settings.aiTradingEnabled ? "Disable AI strategy" : "Enable AI strategy"}
-            </button>
-          </article>
+          <div className="card">
+            <h3>Strategies</h3>
+            <div className="strat-row">
+              <div className="strat">
+                <div className="strat-header">
+                  <span>Copy</span>
+                  <span className={`dot ${state.settings.copyTradingEnabled ? "on" : ""}`} />
+                </div>
+                <input value={draft.copyTargetWallet} onChange={(e) => setDraft({ ...draft, copyTargetWallet: e.target.value })} placeholder="Target 0x..." />
+                <input type="number" value={draft.copyAmountUsd} onChange={(e) => setDraft({ ...draft, copyAmountUsd: Number(e.target.value) })} placeholder="Amount $" />
+                <button className={state.settings.copyTradingEnabled ? "danger" : "primary"} onClick={() => void patchSettings({ copyTradingEnabled: !state.settings.copyTradingEnabled })}>
+                  {state.settings.copyTradingEnabled ? "Off" : "On"}
+                </button>
+              </div>
+              <div className="strat">
+                <div className="strat-header">
+                  <span>AI</span>
+                  <span className={`dot ${state.settings.aiTradingEnabled ? "on" : ""}`} />
+                </div>
+                <p className="strat-desc">Kimi API</p>
+                <button className={state.settings.aiTradingEnabled ? "danger" : "primary"} onClick={() => void patchSettings({ aiTradingEnabled: !state.settings.aiTradingEnabled })}>
+                  {state.settings.aiTradingEnabled ? "Off" : "On"}
+                </button>
+              </div>
+            </div>
+            <div className="save-bar">
+              <button className="primary" onClick={() => void saveDraft()}>Save</button>
+            </div>
+          </div>
         </div>
-        <div className="row-right">
-          <button className="primary" onClick={() => void saveDraft()}>
-            Save all settings
-          </button>
+
+        <div className="col-right">
+          <div className="card flex-1">
+            <h3>Positions ({state.openPositions.length})</h3>
+            <div className="scroll-box">
+              {state.openPositions.length === 0 ? (
+                <p className="empty">No open positions</p>
+              ) : (
+                state.openPositions.map((p, idx) => (
+                  <div key={`${p.marketId}-${idx}`} className="row-item">
+                    <span className={`tag ${p.source.toLowerCase()}`}>{p.source}</span>
+                    <span className="row-text">{p.marketId.slice(0, 20)}… {p.side} ${p.amountUsd}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="card flex-1">
+            <h3>Logs</h3>
+            <div className="scroll-box">
+              {state.logs.length === 0 ? (
+                <p className="empty">No logs</p>
+              ) : (
+                state.logs.slice(0, 50).map((line, idx) => (
+                  <div key={idx} className="log-line">{line}</div>
+                ))
+              )}
+            </div>
+          </div>
         </div>
-      </section>
-
-      <section className="panel">
-        <h2>Open positions</h2>
-        <ul className="list">
-          {state.openPositions.map((p, idx) => (
-            <li key={`${p.marketId}-${idx}`}>
-              <span>[{p.source}]</span> {p.marketId} — {p.side} {p.outcome} — ${p.amountUsd}
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section className="panel">
-        <h2>Recent logs</h2>
-        <ul className="list">
-          {state.logs.slice(0, 30).map((line, idx) => (
-            <li key={idx}>{line}</li>
-          ))}
-        </ul>
-      </section>
+      </div>
     </main>
   );
 }

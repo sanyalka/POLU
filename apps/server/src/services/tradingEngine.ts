@@ -1,5 +1,7 @@
 import pino from "pino";
 import { env } from "../config.js";
+import { loadSavedSettings, saveSettings } from "../settingsStore.js";
+import { loadSavedState, saveState } from "../stateStore.js";
 import { AiAdvisor } from "./aiAdvisor.js";
 import { CopyTradingService } from "./copyTradingService.js";
 import { PolymarketClient } from "./polymarketClient.js";
@@ -15,10 +17,14 @@ const defaultSettings: BotSettings = {
   copyAmountUsd: 20,
   pollIntervalMs: 15000,
   maxExposureUsd: 500,
+  minBalanceUsd: 10,
   executionMode: "SIMULATION",
   signatureType: env.POLYMARKET_SIGNATURE_TYPE as 0 | 1 | 2,
   funder: env.POLYMARKET_PROXY_ADDRESS ?? ""
 };
+
+const saved = loadSavedSettings();
+const initialSettings: BotSettings = { ...defaultSettings, ...saved };
 
 export class TradingEngine {
   private readonly polymarketClient = new PolymarketClient();
@@ -27,15 +33,22 @@ export class TradingEngine {
 
   private intervalRef?: NodeJS.Timeout;
 
-  readonly state: BotState = {
-    settings: defaultSettings,
-    openPositions: [],
-    ignoredTradeIds: [],
-    copiedPositionKeys: [],
-    logs: [],
-    accountBalanceUsd: null,
-    lastPolymarketError: null
-  };
+  readonly state: BotState;
+
+  constructor() {
+    const savedState = loadSavedState();
+    this.state = {
+      settings: initialSettings,
+      openPositions: [],
+      ignoredTradeIds: [],
+      copiedPositionKeys: [],
+      logs: [],
+      accountBalanceUsd: null,
+      lastPolymarketError: null,
+      ...savedState,
+      settings: initialSettings
+    };
+  }
 
   start(): void {
     this.stop();
@@ -57,6 +70,7 @@ export class TradingEngine {
       ...nextSettings
     };
 
+    saveSettings(this.state.settings);
     this.start();
     return this.state;
   }
@@ -76,8 +90,12 @@ export class TradingEngine {
 
   private async refreshBalance(): Promise<void> {
     try {
-      this.state.accountBalanceUsd = await this.polymarketClient.getBalanceUsd(this.state.settings);
+      const balance = await this.polymarketClient.getBalanceUsd(this.state.settings);
+      this.state.accountBalanceUsd = balance;
       this.state.lastPolymarketError = null;
+      if (balance === null) {
+        this.pushLog("Balance: unavailable (no credentials or address configured)");
+      }
     } catch (error) {
       this.handlePolymarketError(error);
     }
@@ -91,6 +109,12 @@ export class TradingEngine {
     await this.refreshBalance();
 
     if (!this.state.settings.enabled) {
+      return;
+    }
+
+    const balance = this.state.accountBalanceUsd ?? 0;
+    if (balance < this.state.settings.minBalanceUsd) {
+      this.pushLog(`Tick skipped: balance $${balance.toFixed(2)} below minimum $${this.state.settings.minBalanceUsd}`);
       return;
     }
 
@@ -155,5 +179,16 @@ export class TradingEngine {
         this.handlePolymarketError(error);
       }
     }
+
+    this.persistState();
+  }
+
+  private persistState(): void {
+    saveState({
+      ...this.state,
+      accountBalanceUsd: null,
+      lastPolymarketError: null,
+      logs: []
+    });
   }
 }

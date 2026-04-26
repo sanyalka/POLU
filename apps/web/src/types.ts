@@ -10,6 +10,7 @@ export interface BotSettings {
   copyAmountUsd: number;
   pollIntervalMs: number;
   maxExposureUsd: number;
+  minBalanceUsd: number;
   executionMode: ExecutionMode;
   signatureType: SignatureType;
   funder: string;

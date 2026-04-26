@@ -1,0 +1,21 @@
+{
+  "settings": {
+    "enabled": true,
+    "aiTradingEnabled": false,
+    "copyTradingEnabled": true,
+    "copyTargetWallet": "0x2a2c53bd278c04da9962fcf96490e17f3dfb9bc1",
+    "copyAmountUsd": 1,
+    "pollIntervalMs": 15000,
+    "maxExposureUsd": 500,
+    "minBalanceUsd": 50,
+    "executionMode": "LIVE",
+    "signatureType": 1,
+    "funder": "0x8f037a2e4fd49d11267f4ab874ab7ba745ac64d6"
+  },
+  "openPositions": [],
+  "ignoredTradeIds": [],
+  "copiedPositionKeys": [],
+  "logs": [],
+  "accountBalanceUsd": null,
+  "lastPolymarketError": null
+}

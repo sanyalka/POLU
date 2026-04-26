@@ -4,3 +4,4 @@ apps/*/dist/
 *.log
 .env
 apps/server/.env
+settings.json
