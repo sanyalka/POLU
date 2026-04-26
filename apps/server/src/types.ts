@@ -49,4 +49,6 @@ export interface BotState {
   ignoredTradeIds: string[];
   copiedPositionKeys: string[];
   logs: string[];
+  accountBalanceUsd: number | null;
+  lastPolymarketError: string | null;
 }

@@ -2,7 +2,7 @@
 
 Монорепо:
 - `apps/server`: торговый движок + API.
-- `apps/web`: новый UI-консоль на Vite + React + TypeScript.
+- `apps/web`: UI-консоль на Vite + React + TypeScript.
 
 ## Реализовано
 
@@ -24,6 +24,11 @@
   - `funder` (важно для `signature_type=1`),
   - `executionMode` (`SIMULATION` / `LIVE`).
 - Для proxy/email login используйте `signatureType=1` и укажите адрес `funder`.
+
+### 4) Устойчивость к 401 и загрузка баланса
+- Ошибки Polymarket API больше не роняют процесс.
+- Если API вернул 401 для трейдов/баланса — бот продолжает работу, а warning отображается в логах и UI.
+- В `state` добавлены `accountBalanceUsd` и `lastPolymarketError`.
 
 ## Безопасность
 - По умолчанию `executionMode=SIMULATION`.
@@ -54,4 +59,7 @@ POLYMARKET_API_URL=https://clob.polymarket.com
 POLYMARKET_PRIVATE_KEY=
 POLYMARKET_PROXY_ADDRESS=
 POLYMARKET_SIGNATURE_TYPE=1
+POLYMARKET_API_KEY=
+POLYMARKET_API_SECRET=
+POLYMARKET_API_PASSPHRASE=
 ```

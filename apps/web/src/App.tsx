@@ -22,7 +22,9 @@ const defaultState: BotState = {
   openPositions: [],
   ignoredTradeIds: [],
   copiedPositionKeys: [],
-  logs: []
+  logs: [],
+  accountBalanceUsd: null,
+  lastPolymarketError: null
 };
 
 function readDraftFromStorage(): BotSettings {
@@ -142,6 +144,13 @@ export function App() {
         </section>
       )}
 
+      {state.lastPolymarketError && (
+        <section className="alert error">
+          <strong>Polymarket API warning</strong>
+          <code>{state.lastPolymarketError}</code>
+        </section>
+      )}
+
       {lastSyncAt && !isOffline && (
         <section className="alert success">
           <span>Synced with backend: {new Date(lastSyncAt).toLocaleString()}</span>
@@ -164,6 +173,10 @@ export function App() {
         <article className="stat-card">
           <span>Copied positions tracked</span>
           <strong>{state.copiedPositionKeys.length}</strong>
+        </article>
+        <article className="stat-card">
+          <span>Balance (USD)</span>
+          <strong>{state.accountBalanceUsd === null ? "N/A" : `$${state.accountBalanceUsd.toFixed(2)}`}</strong>
         </article>
       </section>
 

@@ -32,7 +32,9 @@ export class TradingEngine {
     openPositions: [],
     ignoredTradeIds: [],
     copiedPositionKeys: [],
-    logs: []
+    logs: [],
+    accountBalanceUsd: null,
+    lastPolymarketError: null
   };
 
   start(): void {
@@ -66,7 +68,28 @@ export class TradingEngine {
     logger.info(row);
   }
 
+  private handlePolymarketError(error: unknown): void {
+    const message = error instanceof Error ? error.message : "Unknown Polymarket error";
+    this.state.lastPolymarketError = message;
+    this.pushLog(`Polymarket warning: ${message}`);
+  }
+
+  private async refreshBalance(): Promise<void> {
+    try {
+      this.state.accountBalanceUsd = await this.polymarketClient.getBalanceUsd(this.state.settings.funder);
+      this.state.lastPolymarketError = null;
+    } catch (error) {
+      this.handlePolymarketError(error);
+    }
+  }
+
+  async refreshStatus(): Promise<void> {
+    await this.refreshBalance();
+  }
+
   async tick(): Promise<void> {
+    await this.refreshBalance();
+
     if (!this.state.settings.enabled) {
       return;
     }
@@ -74,29 +97,37 @@ export class TradingEngine {
     const instructions: TradeInstruction[] = [];
 
     if (this.state.settings.copyTradingEnabled) {
-      const copyInstructions = await this.copyTradingService.generateInstructions(this.state);
-      instructions.push(...copyInstructions);
+      try {
+        const copyInstructions = await this.copyTradingService.generateInstructions(this.state);
+        instructions.push(...copyInstructions);
+      } catch (error) {
+        this.handlePolymarketError(error);
+      }
     }
 
     if (this.state.settings.aiTradingEnabled) {
-      const aiInstructions = await this.aiAdvisor.proposeTrades({
-        maxExposureUsd: this.state.settings.maxExposureUsd,
-        openExposureUsd: this.state.openPositions.reduce((acc, p) => acc + p.amountUsd, 0),
-        watchlist: [
-          {
-            marketId: "election-2028-dem",
-            title: "Will Democrats win US Presidential Election 2028?",
-            impliedProbYes: 0.51
-          },
-          {
-            marketId: "btc-150k-2026",
-            title: "Will BTC reach $150k by Dec 31, 2026?",
-            impliedProbYes: 0.27
-          }
-        ]
-      });
+      try {
+        const aiInstructions = await this.aiAdvisor.proposeTrades({
+          maxExposureUsd: this.state.settings.maxExposureUsd,
+          openExposureUsd: this.state.openPositions.reduce((acc, p) => acc + p.amountUsd, 0),
+          watchlist: [
+            {
+              marketId: "election-2028-dem",
+              title: "Will Democrats win US Presidential Election 2028?",
+              impliedProbYes: 0.51
+            },
+            {
+              marketId: "btc-150k-2026",
+              title: "Will BTC reach $150k by Dec 31, 2026?",
+              impliedProbYes: 0.27
+            }
+          ]
+        });
 
-      instructions.push(...aiInstructions);
+        instructions.push(...aiInstructions);
+      } catch (error) {
+        this.pushLog(`AI warning: ${error instanceof Error ? error.message : "Unknown AI error"}`);
+      }
     }
 
     for (const instruction of instructions) {
@@ -106,18 +137,22 @@ export class TradingEngine {
         continue;
       }
 
-      const result = await this.polymarketClient.placeOrder(instruction, this.state.settings);
-      if (result.ok) {
-        this.state.openPositions.push({
-          marketId: instruction.marketId,
-          outcome: instruction.outcome,
-          side: instruction.side,
-          amountUsd: instruction.amountUsd,
-          price: 0.5,
-          timestamp: new Date().toISOString(),
-          source: instruction.source
-        });
-        this.pushLog(`[${result.mode}] ${instruction.source} ${instruction.side} ${instruction.outcome} in ${instruction.marketId} for $${instruction.amountUsd}. ${instruction.reason}`);
+      try {
+        const result = await this.polymarketClient.placeOrder(instruction, this.state.settings);
+        if (result.ok) {
+          this.state.openPositions.push({
+            marketId: instruction.marketId,
+            outcome: instruction.outcome,
+            side: instruction.side,
+            amountUsd: instruction.amountUsd,
+            price: 0.5,
+            timestamp: new Date().toISOString(),
+            source: instruction.source
+          });
+          this.pushLog(`[${result.mode}] ${instruction.source} ${instruction.side} ${instruction.outcome} in ${instruction.marketId} for $${instruction.amountUsd}. ${instruction.reason}`);
+        }
+      } catch (error) {
+        this.handlePolymarketError(error);
       }
     }
   }

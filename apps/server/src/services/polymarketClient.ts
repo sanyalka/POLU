@@ -8,12 +8,34 @@ interface PlaceOrderResult {
 }
 
 export class PolymarketClient {
+  private authHeaders(): Record<string, string> {
+    const headers: Record<string, string> = {};
+    if (env.POLYMARKET_API_KEY) {
+      headers["POLY_API_KEY"] = env.POLYMARKET_API_KEY;
+    }
+    if (env.POLYMARKET_API_SECRET) {
+      headers["POLY_API_SECRET"] = env.POLYMARKET_API_SECRET;
+    }
+    if (env.POLYMARKET_API_PASSPHRASE) {
+      headers["POLY_PASSPHRASE"] = env.POLYMARKET_API_PASSPHRASE;
+    }
+    return headers;
+  }
+
   async getRecentTradesByWallet(wallet: string): Promise<CopyTargetTrade[]> {
     const url = new URL(`${env.POLYMARKET_API_URL}/data/trades`);
     url.searchParams.set("maker", wallet);
     url.searchParams.set("limit", "50");
 
-    const response = await fetch(url, { method: "GET" });
+    const response = await fetch(url, {
+      method: "GET",
+      headers: this.authHeaders()
+    });
+
+    if (response.status === 401) {
+      return [];
+    }
+
     if (!response.ok) {
       throw new Error(`Failed to fetch target wallet trades: ${response.status}`);
     }
@@ -28,6 +50,31 @@ export class PolymarketClient {
       price: Number(row.price ?? 0.5),
       createdAt: String(row.timestamp ?? new Date().toISOString())
     }));
+  }
+
+  async getBalanceUsd(funder: string): Promise<number | null> {
+    if (!funder) {
+      return null;
+    }
+
+    const url = new URL(`${env.POLYMARKET_API_URL}/balance`);
+    url.searchParams.set("address", funder);
+
+    const response = await fetch(url, {
+      method: "GET",
+      headers: this.authHeaders()
+    });
+
+    if (response.status === 401) {
+      return null;
+    }
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch balance: ${response.status}`);
+    }
+
+    const data = (await response.json()) as { balance?: number; available?: number; total?: number };
+    return Number(data.available ?? data.balance ?? data.total ?? 0);
   }
 
   async placeOrder(instruction: TradeInstruction, settings: BotSettings): Promise<PlaceOrderResult> {
@@ -48,12 +95,11 @@ export class PolymarketClient {
       funder: settings.funder || env.POLYMARKET_PROXY_ADDRESS || ""
     };
 
-    // NOTE: Endpoint/shape for LIVE order placement can vary depending on integration path.
-    // We keep signature_type and funder explicit for proxy/magic-login accounts.
     const response = await fetch(`${env.POLYMARKET_API_URL}/order`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        ...this.authHeaders()
       },
       body: JSON.stringify(payload)
     });

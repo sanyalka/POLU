@@ -13,7 +13,8 @@ app.get("/api/health", (_req, res) => {
   res.json({ ok: true, now: new Date().toISOString() });
 });
 
-app.get("/api/state", (_req, res) => {
+app.get("/api/state", async (_req, res) => {
+  await engine.refreshStatus();
   res.json(engine.state);
 });
 
