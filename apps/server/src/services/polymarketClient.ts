@@ -7,19 +7,71 @@ interface PlaceOrderResult {
   mode: "SIMULATION" | "LIVE";
 }
 
+type ApiCreds = { apiKey: string; secret: string; passphrase: string };
+
 export class PolymarketClient {
+  private derivedCreds?: ApiCreds;
+
   private authHeaders(): Record<string, string> {
     const headers: Record<string, string> = {};
-    if (env.POLYMARKET_API_KEY) {
-      headers["POLY_API_KEY"] = env.POLYMARKET_API_KEY;
+    const creds = this.getKnownCreds();
+    if (creds?.apiKey) {
+      headers.POLY_API_KEY = creds.apiKey;
     }
-    if (env.POLYMARKET_API_SECRET) {
-      headers["POLY_API_SECRET"] = env.POLYMARKET_API_SECRET;
+    if (creds?.secret) {
+      headers.POLY_API_SECRET = creds.secret;
     }
-    if (env.POLYMARKET_API_PASSPHRASE) {
-      headers["POLY_PASSPHRASE"] = env.POLYMARKET_API_PASSPHRASE;
+    if (creds?.passphrase) {
+      headers.POLY_PASSPHRASE = creds.passphrase;
     }
     return headers;
+  }
+
+  private getKnownCreds(): ApiCreds | undefined {
+    if (env.POLYMARKET_API_KEY && env.POLYMARKET_API_SECRET && env.POLYMARKET_API_PASSPHRASE) {
+      return {
+        apiKey: env.POLYMARKET_API_KEY,
+        secret: env.POLYMARKET_API_SECRET,
+        passphrase: env.POLYMARKET_API_PASSPHRASE
+      };
+    }
+
+    return this.derivedCreds;
+  }
+
+  private async tryCreateSdkBalanceClient(settings: BotSettings): Promise<any | null> {
+    if (!env.POLYMARKET_PRIVATE_KEY) {
+      return null;
+    }
+
+    try {
+      // @ts-ignore optional dependency
+      const { ClobClient } = await import("@polymarket/clob-client-v2");
+      // @ts-ignore optional dependency
+      const { Wallet } = await import("ethers");
+
+      const signer = new Wallet(env.POLYMARKET_PRIVATE_KEY);
+      const creds = this.getKnownCreds();
+
+      const baseConfig = {
+        host: env.POLYMARKET_API_URL,
+        chain: env.POLYGON_CHAIN_ID,
+        signer,
+        signatureType: settings.signatureType,
+        funderAddress: settings.funder || env.POLYMARKET_PROXY_ADDRESS || signer.address
+      };
+
+      if (creds) {
+        return new ClobClient({ ...baseConfig, creds });
+      }
+
+      const clientNoCreds = new ClobClient(baseConfig);
+      const derived = (await clientNoCreds.createOrDeriveApiKey()) as ApiCreds;
+      this.derivedCreds = derived;
+      return new ClobClient({ ...baseConfig, creds: derived });
+    } catch {
+      return null;
+    }
   }
 
   async getRecentTradesByWallet(wallet: string): Promise<CopyTargetTrade[]> {
@@ -52,7 +104,23 @@ export class PolymarketClient {
     }));
   }
 
-  async getBalanceUsd(funder: string): Promise<number | null> {
+  async getBalanceUsd(settings: BotSettings): Promise<number | null> {
+    const sdkClient = await this.tryCreateSdkBalanceClient(settings);
+
+    if (sdkClient) {
+      try {
+        const ba = (await sdkClient.getBalanceAllowance({ asset_type: "COLLATERAL" })) as {
+          balance?: string;
+        };
+        if (ba.balance !== undefined) {
+          return Number(ba.balance);
+        }
+      } catch {
+        // fallback to REST path below
+      }
+    }
+
+    const funder = settings.funder || env.POLYMARKET_PROXY_ADDRESS || "";
     if (!funder) {
       return null;
     }

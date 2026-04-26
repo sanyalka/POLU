@@ -8,6 +8,7 @@ const envSchema = z.object({
   OPENAI_MODEL: z.string().default("gpt-4o-mini"),
   OPENAI_BASE_URL: z.string().default("https://api.openai.com/v1"),
   POLYMARKET_API_URL: z.string().default("https://clob.polymarket.com"),
+  POLYGON_CHAIN_ID: z.coerce.number().default(137),
   POLYMARKET_PRIVATE_KEY: z.string().optional(),
   POLYMARKET_PROXY_ADDRESS: z.string().optional(),
   POLYMARKET_SIGNATURE_TYPE: z.coerce.number().default(1),

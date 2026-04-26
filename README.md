@@ -28,7 +28,8 @@
 ### 4) Устойчивость к 401 и загрузка баланса
 - Ошибки Polymarket API больше не роняют процесс.
 - Если API вернул 401 для трейдов или 401/404 для баланса — бот продолжает работу без падения.
-- В `state` добавлены `accountBalanceUsd` и `lastPolymarketError`.
+- Баланс сначала читается через `ClobClient.getBalanceAllowance({asset_type: "COLLATERAL"})`; REST fallback используется только как резерв.
+- Если указан `POLYMARKET_PRIVATE_KEY`, бот автоматически делает `createOrDeriveApiKey()` и использует derived creds.
 
 ## Безопасность
 - По умолчанию `executionMode=SIMULATION`.
@@ -56,6 +57,7 @@ OPENAI_API_KEY=
 OPENAI_MODEL=gpt-4o-mini
 OPENAI_BASE_URL=https://api.openai.com/v1
 POLYMARKET_API_URL=https://clob.polymarket.com
+POLYGON_CHAIN_ID=137
 POLYMARKET_PRIVATE_KEY=
 POLYMARKET_PROXY_ADDRESS=
 POLYMARKET_SIGNATURE_TYPE=1
@@ -63,3 +65,5 @@ POLYMARKET_API_KEY=
 POLYMARKET_API_SECRET=
 POLYMARKET_API_PASSPHRASE=
 ```
+
+Если есть `POLYMARKET_PRIVATE_KEY`, поля `POLYMARKET_API_KEY/SECRET/PASSPHRASE` можно не задавать — бот попробует derivation автоматически.
