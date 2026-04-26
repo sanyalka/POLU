@@ -69,3 +69,13 @@ POLYMARKET_API_PASSPHRASE=
 ```
 
 Если есть `POLYMARKET_PRIVATE_KEY`, поля `POLYMARKET_API_KEY/SECRET/PASSPHRASE` можно не задавать — бот попробует derivation автоматически.
+
+## Windows note (Rollup optional dependency)
+Если на Windows при `npm run dev -w apps/web` появляется ошибка вида
+`Cannot find module @rollup/rollup-win32-x64-msvc`,
+теперь в `predev/prebuild` запускается авто-проверка и доустановка нужного пакета.
+
+Если проблема осталась, выполните вручную:
+```bash
+npm install --include=optional
+```

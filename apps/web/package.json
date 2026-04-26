@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "predev": "node ./scripts/ensure-rollup-native.mjs",
+    "prebuild": "node ./scripts/ensure-rollup-native.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",
