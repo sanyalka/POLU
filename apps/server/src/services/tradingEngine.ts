@@ -1,4 +1,5 @@
 import pino from "pino";
+import { env } from "../config.js";
 import { AiAdvisor } from "./aiAdvisor.js";
 import { CopyTradingService } from "./copyTradingService.js";
 import { PolymarketClient } from "./polymarketClient.js";
@@ -13,7 +14,10 @@ const defaultSettings: BotSettings = {
   copyTargetWallet: "",
   copyAmountUsd: 20,
   pollIntervalMs: 15000,
-  maxExposureUsd: 500
+  maxExposureUsd: 500,
+  executionMode: "SIMULATION",
+  signatureType: env.POLYMARKET_SIGNATURE_TYPE as 0 | 1 | 2,
+  funder: env.POLYMARKET_PROXY_ADDRESS ?? ""
 };
 
 export class TradingEngine {
@@ -58,7 +62,7 @@ export class TradingEngine {
   private pushLog(message: string): void {
     const row = `${new Date().toISOString()} ${message}`;
     this.state.logs.unshift(row);
-    this.state.logs = this.state.logs.slice(0, 200);
+    this.state.logs = this.state.logs.slice(0, 250);
     logger.info(row);
   }
 
@@ -98,11 +102,11 @@ export class TradingEngine {
     for (const instruction of instructions) {
       const currentExposure = this.state.openPositions.reduce((acc, p) => acc + p.amountUsd, 0);
       if (currentExposure + instruction.amountUsd > this.state.settings.maxExposureUsd) {
-        this.pushLog(`Skipped order for ${instruction.marketId} due to max exposure.`);
+        this.pushLog(`Skipped ${instruction.source} order for ${instruction.marketId}: exposure limit.`);
         continue;
       }
 
-      const result = await this.polymarketClient.placeOrder(instruction);
+      const result = await this.polymarketClient.placeOrder(instruction, this.state.settings);
       if (result.ok) {
         this.state.openPositions.push({
           marketId: instruction.marketId,
@@ -110,9 +114,10 @@ export class TradingEngine {
           side: instruction.side,
           amountUsd: instruction.amountUsd,
           price: 0.5,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          source: instruction.source
         });
-        this.pushLog(`Executed ${instruction.side} ${instruction.outcome} in ${instruction.marketId} for $${instruction.amountUsd}. ${instruction.reason}`);
+        this.pushLog(`[${result.mode}] ${instruction.source} ${instruction.side} ${instruction.outcome} in ${instruction.marketId} for $${instruction.amountUsd}. ${instruction.reason}`);
       }
     }
   }

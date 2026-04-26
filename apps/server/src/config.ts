@@ -9,7 +9,8 @@ const envSchema = z.object({
   OPENAI_BASE_URL: z.string().default("https://api.openai.com/v1"),
   POLYMARKET_API_URL: z.string().default("https://clob.polymarket.com"),
   POLYMARKET_PRIVATE_KEY: z.string().optional(),
-  POLYMARKET_PROXY_ADDRESS: z.string().optional()
+  POLYMARKET_PROXY_ADDRESS: z.string().optional(),
+  POLYMARKET_SIGNATURE_TYPE: z.coerce.number().default(1)
 });
 
 export const env = envSchema.parse(process.env);

@@ -1,53 +1,152 @@
 :root {
   font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-  color: #e8f0ff;
-  background: #0f172a;
+  color: #e6edf7;
+  background: linear-gradient(180deg, #0a1020 0%, #0f172a 100%);
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
 }
 
-.page {
-  max-width: 960px;
+.layout {
+  max-width: 1080px;
   margin: 0 auto;
   padding: 24px;
   display: grid;
   gap: 16px;
 }
 
-.card {
-  border: 1px solid #334155;
-  border-radius: 12px;
-  padding: 16px;
-  background: #111827;
+.hero,
+.panel,
+.stat-card {
+  background: rgba(15, 23, 42, 0.88);
+  border: 1px solid #26344f;
+  border-radius: 14px;
 }
 
-.row {
+.hero {
+  padding: 20px;
   display: flex;
-  gap: 8px;
-  margin-top: 8px;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
 }
 
-input {
+.hero h1 {
+  margin: 0;
+}
+
+.hero p {
+  margin: 6px 0 0;
+  color: #9fb2d2;
+}
+
+.hero-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.stat-card {
+  padding: 14px;
+  display: grid;
+  gap: 6px;
+}
+
+.stat-card span {
+  color: #8ca1c3;
+  font-size: 13px;
+}
+
+.panel {
+  padding: 18px;
+}
+
+.panel h2 {
+  margin-top: 0;
+}
+
+.grid.two {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+label {
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+  color: #c8d5ea;
+}
+
+label.full {
+  grid-column: 1 / -1;
+}
+
+input,
+select {
   width: 100%;
-  padding: 8px;
-  margin-top: 6px;
-  border-radius: 8px;
-  border: 1px solid #334155;
-  background: #020617;
-  color: white;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid #324562;
+  background: #0b1222;
+  color: #ffffff;
 }
 
 button {
   border: none;
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 10px 14px;
   cursor: pointer;
-  background: #2563eb;
   color: white;
 }
 
-ul {
+button.primary {
+  background: #2563eb;
+}
+
+button.secondary {
+  background: #334155;
+}
+
+.strategy {
+  border: 1px solid #2c3f5b;
+  border-radius: 12px;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.row-right {
+  margin-top: 14px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.list {
+  margin: 0;
   padding-left: 18px;
+  display: grid;
+  gap: 6px;
+}
+
+@media (max-width: 900px) {
+  .stats-grid,
+  .grid.two {
+    grid-template-columns: 1fr;
+  }
+
+  .hero {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }

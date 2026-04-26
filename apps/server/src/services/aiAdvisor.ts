@@ -1,6 +1,8 @@
 import { env } from "../config.js";
 import { TradeInstruction } from "../types.js";
 
+type AiInstruction = Omit<TradeInstruction, "source">;
+
 const systemPrompt = `You are an ultra-conservative trading copilot for Polymarket.
 Return JSON only: {"instructions":[{"marketId":"string","outcome":"string","side":"YES|NO","amountUsd":number,"reason":"string"}]}
 Rules:
@@ -43,8 +45,10 @@ export class AiAdvisor {
     };
 
     const content = payload.choices?.[0]?.message?.content ?? '{"instructions":[]}';
-    const parsed = JSON.parse(content) as { instructions?: TradeInstruction[] };
+    const parsed = JSON.parse(content) as { instructions?: AiInstruction[] };
 
-    return (parsed.instructions ?? []).filter((i) => i.amountUsd > 0);
+    return (parsed.instructions ?? [])
+      .filter((i) => i.amountUsd > 0)
+      .map((i) => ({ ...i, source: "AI" as const }));
   }
 }

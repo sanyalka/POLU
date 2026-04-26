@@ -1,4 +1,6 @@
 export type Side = "YES" | "NO";
+export type SignatureType = 0 | 1 | 2;
+export type ExecutionMode = "SIMULATION" | "LIVE";
 
 export interface BotSettings {
   enabled: boolean;
@@ -8,6 +10,9 @@ export interface BotSettings {
   copyAmountUsd: number;
   pollIntervalMs: number;
   maxExposureUsd: number;
+  executionMode: ExecutionMode;
+  signatureType: SignatureType;
+  funder: string;
 }
 
 export interface MarketPosition {
@@ -17,6 +22,7 @@ export interface MarketPosition {
   amountUsd: number;
   price: number;
   timestamp: string;
+  source: "AI" | "COPY";
 }
 
 export interface BotState {

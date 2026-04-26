@@ -26,7 +26,8 @@ export class CopyTradingService {
         outcome: trade.outcome,
         side: trade.side,
         amountUsd: state.settings.copyAmountUsd,
-        reason: `Copy trade from ${state.settings.copyTargetWallet}, tradeId=${trade.id}`
+        reason: `Copy trade from ${state.settings.copyTargetWallet}, tradeId=${trade.id}`,
+        source: "COPY"
       });
       state.copiedPositionKeys.push(copyKey);
     }

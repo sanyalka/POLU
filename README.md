@@ -1,31 +1,35 @@
 # POLU — Polymarket Trading Bot (JS/TS + Vite)
 
-Новый репозиторий реализован с нуля как монорепо:
+Монорепо:
 - `apps/server`: торговый движок + API.
-- `apps/web`: веб-интерфейс на Vite + React + TypeScript.
+- `apps/web`: новый UI-консоль на Vite + React + TypeScript.
 
-## Что реализовано
+## Реализовано
 
 ### 1) Интеллектуальная торговля через API нейросети
-- Сервис `AiAdvisor` обращается к OpenAI-compatible API (`/chat/completions`).
-- Модель получает контекст (watchlist, текущая экспозиция, лимиты риска).
-- Возвращает JSON-инструкции сделок, которые проходят риск-фильтр `maxExposureUsd`.
+- `AiAdvisor` запрашивает OpenAI-compatible `/chat/completions`.
+- Модель получает контекст рынка и лимиты риска.
+- Ответ преобразуется в инструкции сделок c источником `AI`.
 
 ### 2) Копирование сделок другого пользователя
-- Сервис `CopyTradingService` читает последние сделки адреса-цели.
-- Для каждой новой сделки создается инструкция с фиксированным объемом (`copyAmountUsd`).
-- Повторно уже обработанные сделки не копируются (`ignoredTradeIds`).
-- Бот ждет только новые сделки.
+- `CopyTradingService` читает последние трейды target wallet.
+- Копирует фиксированным объёмом (`copyAmountUsd`).
+- Повторно не копирует:
+  - уже обработанные `tradeId`,
+  - уже купленную комбинацию `marketId:outcome:side`.
 
-## Важно перед боевым запуском
-Текущая версия по умолчанию использует `placeOrder` как **безопасную заглушку** (симуляция), чтобы избежать случайной живой торговли.
-Для production требуется:
-- подписывание ордеров CLOB Polymarket,
-- обработка nonce/signature,
-- надежные ретраи, мониторинг и алерты,
-- управление приватными ключами через безопасный secret manager.
+### 3) Polymarket Proxy / Magic login (signature_type=1)
+- В настройках добавлены:
+  - `signatureType` (0/1/2),
+  - `funder` (важно для `signature_type=1`),
+  - `executionMode` (`SIMULATION` / `LIVE`).
+- Для proxy/email login используйте `signatureType=1` и укажите адрес `funder`.
 
-## Быстрый старт
+## Безопасность
+- По умолчанию `executionMode=SIMULATION`.
+- Для LIVE-торговли обязательно проверьте endpoint/формат ордера вашей интеграции Polymarket CLOB.
+
+## Запуск
 
 ```bash
 npm install
@@ -36,8 +40,7 @@ npm run dev -w apps/web
 - API: `http://localhost:8080/api`
 - UI: `http://localhost:5173`
 
-## Переменные окружения (server)
-Создайте `apps/server/.env`:
+## .env (apps/server/.env)
 
 ```env
 PORT=8080
@@ -48,10 +51,5 @@ OPENAI_BASE_URL=https://api.openai.com/v1
 POLYMARKET_API_URL=https://clob.polymarket.com
 POLYMARKET_PRIVATE_KEY=
 POLYMARKET_PROXY_ADDRESS=
+POLYMARKET_SIGNATURE_TYPE=1
 ```
-
-## Следующие шаги
-1. Подключить официальный SDK/подписание CLOB-ордеров.
-2. Добавить БД (PostgreSQL) для истории позиций и дедупликации не только по tradeId, но и по market/outcome.
-3. Реализовать стоп-лоссы, take-profit, дневные лимиты убытка.
-4. Добавить WebSocket поток рынков и поток сделок target-кошелька.
