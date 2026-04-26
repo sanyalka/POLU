@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { BotSettings, BotState } from "./types";
 
-const API_URL = "http://localhost:8080/api";
+const API_URL = import.meta.env.VITE_API_URL ?? "/api";
+const DRAFT_KEY = "polu_bot_settings_draft_v1";
 
 const defaultSettings: BotSettings = {
   enabled: false,
@@ -24,17 +25,44 @@ const defaultState: BotState = {
   logs: []
 };
 
+function readDraftFromStorage(): BotSettings {
+  const raw = localStorage.getItem(DRAFT_KEY);
+  if (!raw) {
+    return defaultSettings;
+  }
+
+  try {
+    return { ...defaultSettings, ...(JSON.parse(raw) as Partial<BotSettings>) };
+  } catch {
+    return defaultSettings;
+  }
+}
+
 export function App() {
   const [state, setState] = useState<BotState>(defaultState);
-  const [draft, setDraft] = useState<BotSettings>(defaultSettings);
+  const [draft, setDraft] = useState<BotSettings>(() => readDraftFromStorage());
+  const [isOffline, setOffline] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
 
   const exposure = useMemo(() => state.openPositions.reduce((acc, p) => acc + p.amountUsd, 0), [state.openPositions]);
 
   const loadState = async () => {
-    const res = await fetch(`${API_URL}/state`);
-    const json = (await res.json()) as BotState;
-    setState(json);
-    setDraft(json.settings);
+    try {
+      const res = await fetch(`${API_URL}/state`);
+      if (!res.ok) {
+        throw new Error(`state request failed (${res.status})`);
+      }
+      const json = (await res.json()) as BotState;
+      setState(json);
+      setDraft((prev) => ({ ...json.settings, ...prev }));
+      setOffline(false);
+      setError(null);
+      setLastSyncAt(new Date().toISOString());
+    } catch (err) {
+      setOffline(true);
+      setError(err instanceof Error ? err.message : "Backend unavailable");
+    }
   };
 
   useEffect(() => {
@@ -43,15 +71,43 @@ export function App() {
     return () => clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+  }, [draft]);
+
   const patchSettings = async (patch: Partial<BotSettings>) => {
-    const res = await fetch(`${API_URL}/settings`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(patch)
-    });
-    const json = (await res.json()) as BotState;
-    setState(json);
-    setDraft(json.settings);
+    try {
+      const res = await fetch(`${API_URL}/settings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch)
+      });
+      if (!res.ok) {
+        throw new Error(`settings request failed (${res.status})`);
+      }
+      const json = (await res.json()) as BotState;
+      setState(json);
+      setDraft(json.settings);
+      setOffline(false);
+      setError(null);
+      setLastSyncAt(new Date().toISOString());
+    } catch (err) {
+      setOffline(true);
+      setError(err instanceof Error ? err.message : "Failed to save settings");
+    }
+  };
+
+  const runManualTick = async () => {
+    try {
+      const res = await fetch(`${API_URL}/tick`, { method: "POST" });
+      if (!res.ok) {
+        throw new Error(`tick request failed (${res.status})`);
+      }
+      await loadState();
+    } catch (err) {
+      setOffline(true);
+      setError(err instanceof Error ? err.message : "Manual tick failed");
+    }
   };
 
   const saveDraft = async () => {
@@ -69,17 +125,28 @@ export function App() {
           <button className="primary" onClick={() => void patchSettings({ enabled: !state.settings.enabled })}>
             {state.settings.enabled ? "Stop bot" : "Start bot"}
           </button>
-          <button
-            className="secondary"
-            onClick={async () => {
-              await fetch(`${API_URL}/tick`, { method: "POST" });
-              await loadState();
-            }}
-          >
+          <button className="secondary" onClick={() => void runManualTick()}>
             Manual tick
           </button>
         </div>
       </header>
+
+      {(isOffline || error) && (
+        <section className="alert error">
+          <strong>Backend not reachable.</strong>
+          <p>
+            Проверьте запуск server (`npm run dev -w apps/server`) или задайте `VITE_API_URL`. Локальный draft сохраняется в браузере,
+            но в API пока не отправляется.
+          </p>
+          {error && <code>{error}</code>}
+        </section>
+      )}
+
+      {lastSyncAt && !isOffline && (
+        <section className="alert success">
+          <span>Synced with backend: {new Date(lastSyncAt).toLocaleString()}</span>
+        </section>
+      )}
 
       <section className="stats-grid">
         <article className="stat-card">
@@ -88,7 +155,7 @@ export function App() {
         </article>
         <article className="stat-card">
           <span>Execution mode</span>
-          <strong>{state.settings.executionMode}</strong>
+          <strong>{draft.executionMode}</strong>
         </article>
         <article className="stat-card">
           <span>Total exposure</span>

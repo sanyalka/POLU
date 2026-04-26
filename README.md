@@ -40,6 +40,8 @@ npm run dev -w apps/web
 - API: `http://localhost:8080/api`
 - UI: `http://localhost:5173`
 
+Если backend не на localhost:8080, задайте `VITE_API_URL` для web-приложения (например, `VITE_API_URL=http://127.0.0.1:8080/api`).
+
 ## .env (apps/server/.env)
 
 ```env
