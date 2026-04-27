@@ -96,6 +96,15 @@ npm run check:poly -w apps/server
 - делает `createOrDeriveApiKey()`,
 - вызывает `getBalanceAllowance({ asset_type: "COLLATERAL" })`.
 
+Если скрипт показывает баланс, а в web UI баланс всё ещё `0`/`N/A`:
+- проверьте `Sig type` и `Funder` в UI Settings и нажмите **Save**;
+- удалите устаревший `settings.json` в корне проекта и перезапустите backend.
+
+Если баланс есть, но copy-trading не копирует сделки и в логах есть `eth_getLogs ... 429`:
+- это лимит RPC (например Alchemy CU/s);
+- бот теперь сам добавляет retry/backoff и уменьшает окно сканирования при большом лаге;
+- при частых 429 лучше перейти на более быстрый RPC тариф/ключ.
+
 ### Рекомендуемая конфигурация
 
 ```env
