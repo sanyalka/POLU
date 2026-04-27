@@ -48,7 +48,7 @@ async function main() {
       tokenId,
       direction: "BUY",
       reason: "Test EOA order",
-      source: "TEST"
+      source: "AI"
     }, eoaSettings);
     console.log("EOA result:", JSON.stringify(result, null, 2));
   } catch (e: any) {
@@ -79,7 +79,7 @@ async function main() {
       tokenId,
       direction: "BUY",
       reason: "Test PROXY order",
-      source: "TEST"
+      source: "AI"
     }, proxySettings);
     console.log("PROXY result:", JSON.stringify(result, null, 2));
   } catch (e: any) {
