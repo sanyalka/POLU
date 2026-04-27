@@ -96,6 +96,10 @@ npm run check:poly -w apps/server
 - делает `createOrDeriveApiKey()`,
 - вызывает `getBalanceAllowance({ asset_type: "COLLATERAL" })`.
 
+Если скрипт показывает баланс, а в web UI баланс всё ещё `0`/`N/A`:
+- проверьте `Sig type` и `Funder` в UI Settings и нажмите **Save**;
+- удалите устаревший `settings.json` в корне проекта и перезапустите backend.
+
 ### Рекомендуемая конфигурация
 
 ```env
