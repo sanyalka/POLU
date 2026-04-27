@@ -26,6 +26,8 @@ export interface TradeInstruction {
   outcome: string;
   side: Side;
   amountUsd: number;
+  tokenId?: string;      // CLOB token ID for order placement
+  direction?: "BUY" | "SELL"; // CLOB side (BUY/SELL the token)
   reason: string;
   source: "AI" | "COPY";
 }
@@ -44,12 +46,21 @@ export interface BotSettings {
   funder: string;
 }
 
+export interface ManualCopySignal {
+  marketId: string;
+  outcome: string;
+  side: Side;
+  price?: number;
+}
+
 export interface BotState {
   settings: BotSettings;
   openPositions: MarketPosition[];
   ignoredTradeIds: string[];
   copiedPositionKeys: string[];
+  manualCopySignals?: ManualCopySignal[];
   logs: string[];
   accountBalanceUsd: number | null;
   lastPolymarketError: string | null;
+  lastScannedBlock?: number;
 }

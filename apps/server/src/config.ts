@@ -21,6 +21,7 @@ const envSchema = z.object({
   POLYMARKET_PRIVATE_KEY: z.string().optional(),
   POLYMARKET_PROXY_ADDRESS: z.string().optional(),
   POLYMARKET_SIGNATURE_TYPE: z.coerce.number().default(1),
+  POLYGON_RPC_URL: z.string().optional(),
   POLYMARKET_API_KEY: z.string().optional(),
   POLYMARKET_API_SECRET: z.string().optional(),
   POLYMARKET_API_PASSPHRASE: z.string().optional()

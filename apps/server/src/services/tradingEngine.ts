@@ -38,7 +38,6 @@ export class TradingEngine {
   constructor() {
     const savedState = loadSavedState();
     this.state = {
-      settings: initialSettings,
       openPositions: [],
       ignoredTradeIds: [],
       copiedPositionKeys: [],
@@ -122,7 +121,7 @@ export class TradingEngine {
 
     if (this.state.settings.copyTradingEnabled) {
       try {
-        const copyInstructions = await this.copyTradingService.generateInstructions(this.state);
+        const copyInstructions = await this.copyTradingService.generateInstructions(this.state, (msg) => this.pushLog(msg));
         instructions.push(...copyInstructions);
       } catch (error) {
         this.handlePolymarketError(error);

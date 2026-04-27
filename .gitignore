@@ -5,3 +5,4 @@ apps/*/dist/
 .env
 apps/server/.env
 settings.json
+state.json

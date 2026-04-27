@@ -209,6 +209,7 @@ export function App() {
                   <span>Copy</span>
                   <span className={`dot ${state.settings.copyTradingEnabled ? "on" : ""}`} />
                 </div>
+                <p className="strat-desc">Needs target wallet API key</p>
                 <input value={draft.copyTargetWallet} onChange={(e) => setDraft({ ...draft, copyTargetWallet: e.target.value })} placeholder="Target 0x..." />
                 <input type="number" value={draft.copyAmountUsd} onChange={(e) => setDraft({ ...draft, copyAmountUsd: Number(e.target.value) })} placeholder="Amount $" />
                 <button className={state.settings.copyTradingEnabled ? "danger" : "primary"} onClick={() => void patchSettings({ copyTradingEnabled: !state.settings.copyTradingEnabled })}>
