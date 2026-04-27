@@ -45,6 +45,7 @@ export class TradingEngine {
       accountBalanceUsd: null,
       lastPolymarketError: null,
       ...savedState,
+      portfolioValueUsd: savedState?.portfolioValueUsd ?? null,
       settings: initialSettings
     };
   }
