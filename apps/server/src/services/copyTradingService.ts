@@ -66,13 +66,17 @@ export class CopyTradingService {
         try {
           // Skip already processed transactions (same tx can have multiple TransferSingle events)
           const txKey = `${tx.txHash}-${tx.tokenId}-${tx.from}-${tx.to}`;
-          if (this.processedTxs.has(txKey)) continue;
+          if (this.processedTxs.has(txKey)) {
+            pushLog?.(`Copy trade: skip duplicate tx ${tx.txHash.slice(0, 16)}...`);
+            continue;
+          }
           this.processedTxs.add(txKey);
 
           // Determine direction: target wallet receiving = BUY, sending = SELL
           const isBuy = tx.to.toLowerCase() === target;
           const isSell = tx.from.toLowerCase() === target;
           if (!isBuy && !isSell) {
+            pushLog?.(`Copy trade: skip tx ${tx.txHash.slice(0, 16)}... — target not involved`);
             continue;
           }
 
@@ -95,13 +99,6 @@ export class CopyTradingService {
             continue;
           }
 
-          // Build unique trade id
-          const tradeId = `${tx.txHash}-${tx.tokenId}`;
-          if (state.ignoredTradeIds.includes(tradeId)) {
-            continue;
-          }
-          state.ignoredTradeIds.push(tradeId);
-
           const direction: "BUY" | "SELL" = isBuy ? "BUY" : "SELL";
 
           // ERC1155 value is in 1e6 and represents shares count.
@@ -117,6 +114,14 @@ export class CopyTradingService {
             pushLog?.(`Copy trade: skip tiny ${direction} for ${outcome} (estimated $${amountUsd.toFixed(4)})`);
             continue;
           }
+
+          // Build unique trade id — only mark as ignored after all filters pass
+          const tradeId = `${tx.txHash}-${tx.tokenId}`;
+          if (state.ignoredTradeIds.includes(tradeId)) {
+            pushLog?.(`Copy trade: skip already ignored ${tx.txHash.slice(0, 16)}...`);
+            continue;
+          }
+          state.ignoredTradeIds.push(tradeId);
 
           instructions.push({
             marketId: conditionId,

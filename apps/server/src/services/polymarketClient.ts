@@ -6,6 +6,8 @@ interface PlaceOrderResult {
   ok: boolean;
   orderId: string;
   mode: "SIMULATION" | "LIVE";
+  status?: string;
+  raw?: string;
 }
 
 type ApiCreds = { key: string; secret: string; passphrase: string };
@@ -313,7 +315,12 @@ export class PolymarketClient {
     }
 
     // Size = amountUsd / price (in shares, with 2 decimals precision)
-    const size = Math.floor((instruction.amountUsd / price) * 100) / 100;
+    // Round DOWN to stay close to $1, but if total < $1 (Polymarket minimum)
+    // round UP just enough to pass validation.
+    let size = Math.floor((instruction.amountUsd / price) * 100) / 100;
+    if (size * price < 1.0) {
+      size = Math.ceil((instruction.amountUsd / price) * 100) / 100;
+    }
     if (size <= 0) {
       throw new Error(`LIVE order failed: calculated size is zero (amount=$${instruction.amountUsd}, price=${price})`);
     }
@@ -332,10 +339,16 @@ export class PolymarketClient {
     try {
       const signedOrder = await client.createOrder(userOrder);
       const result = await client.postOrder(signedOrder);
+      const raw = JSON.stringify(result, null, 2);
+      if (result && result.success === false) {
+        throw new Error(`Order rejected: ${result.errorMsg || raw}`);
+      }
       return {
         ok: true,
         orderId: result?.orderID ?? result?.id ?? `live-${Date.now()}`,
-        mode: "LIVE"
+        mode: "LIVE",
+        status: result?.status ?? "unknown",
+        raw
       };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

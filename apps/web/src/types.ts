@@ -33,5 +33,6 @@ export interface BotState {
   copiedPositionKeys: string[];
   logs: string[];
   accountBalanceUsd: number | null;
+  portfolioValueUsd: number | null;
   lastPolymarketError: string | null;
 }

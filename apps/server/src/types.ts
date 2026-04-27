@@ -61,6 +61,7 @@ export interface BotState {
   manualCopySignals?: ManualCopySignal[];
   logs: string[];
   accountBalanceUsd: number | null;
+  portfolioValueUsd: number | null;
   lastPolymarketError: string | null;
   lastScannedBlock?: number;
 }

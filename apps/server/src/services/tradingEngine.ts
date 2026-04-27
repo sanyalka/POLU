@@ -77,7 +77,7 @@ export class TradingEngine {
   private pushLog(message: string): void {
     const row = `${new Date().toISOString()} ${message}`;
     this.state.logs.unshift(row);
-    this.state.logs = this.state.logs.slice(0, 250);
+    this.state.logs = this.state.logs.slice(0, 1000);
     logger.info(row);
   }
 
@@ -113,8 +113,7 @@ export class TradingEngine {
 
     const balance = this.state.accountBalanceUsd ?? 0;
     if (balance < this.state.settings.minBalanceUsd) {
-      this.pushLog(`Tick skipped: balance $${balance.toFixed(2)} below minimum $${this.state.settings.minBalanceUsd}`);
-      return;
+      this.pushLog(`Balance $${balance.toFixed(2)} below minimum $${this.state.settings.minBalanceUsd} — BUYs will be skipped, SELLs still allowed`);
     }
 
     const instructions: TradeInstruction[] = [];
@@ -160,6 +159,11 @@ export class TradingEngine {
         continue;
       }
 
+      if (!isSell && balance < this.state.settings.minBalanceUsd) {
+        this.pushLog(`Skipped ${instruction.source} BUY for ${instruction.marketId}: balance below minimum.`);
+        continue;
+      }
+
       const currentExposure = this.state.openPositions.reduce((acc, p) => acc + p.amountUsd, 0);
       if (!isSell && currentExposure + instruction.amountUsd > this.state.settings.maxExposureUsd) {
         this.pushLog(`Skipped ${instruction.source} order for ${instruction.marketId}: exposure limit.`);
@@ -182,7 +186,10 @@ export class TradingEngine {
               source: instruction.source
             });
           }
-          this.pushLog(`[${result.mode}] ${instruction.source} ${instruction.side} ${instruction.outcome} in ${instruction.marketId} for $${instruction.amountUsd}. ${instruction.reason}`);
+          this.pushLog(`[${result.mode}] ${instruction.source} ${instruction.side} ${instruction.outcome} in ${instruction.marketId} for $${instruction.amountUsd}. status=${result.status ?? '?'}. ${instruction.reason}`);
+          if (result.raw) {
+            this.pushLog(`[DEBUG] order raw: ${result.raw.slice(0, 500)}`);
+          }
         }
       } catch (error) {
         this.handlePolymarketError(error);
