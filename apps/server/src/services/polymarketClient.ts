@@ -206,6 +206,31 @@ export class PolymarketClient {
   }
 
   async getBalanceUsd(settings: BotSettings): Promise<number | null> {
+    const primary = await this.getBalanceUsdForSettings(settings);
+    if (primary !== null) {
+      return primary;
+    }
+
+    const envSignatureType = env.POLYMARKET_SIGNATURE_TYPE as 0 | 1 | 2;
+    const envFunder = env.POLYMARKET_PROXY_ADDRESS ?? "";
+    const authDiffersFromEnv = settings.signatureType !== envSignatureType || (settings.funder || "") !== envFunder;
+
+    if (!authDiffersFromEnv) {
+      return null;
+    }
+
+    // If persisted UI settings are stale, retry with .env auth settings.
+    // This commonly happens after key rotation when settings.json still has old signature/funder values.
+    const envSettings: BotSettings = {
+      ...settings,
+      signatureType: envSignatureType,
+      funder: envFunder
+    };
+
+    return this.getBalanceUsdForSettings(envSettings);
+  }
+
+  private async getBalanceUsdForSettings(settings: BotSettings): Promise<number | null> {
     // Try SDK first
     const sdkClient = await this.tryCreateSdkBalanceClient(settings);
 
