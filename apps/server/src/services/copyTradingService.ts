@@ -13,6 +13,7 @@ export class CopyTradingService {
   private readonly goldsky = new GoldskyClient();
   private readonly gamma = new GammaClient();
   private readonly processedTxs = new Set<string>();
+  private static readonly MAX_SCAN_BLOCKS_PER_TICK = 220;
 
   constructor(private readonly polymarketClient?: any) {}
 
@@ -41,6 +42,15 @@ export class CopyTradingService {
 
       if (fromBlock >= currentBlock) {
         return [];
+      }
+
+      const lag = currentBlock - fromBlock;
+      if (lag > CopyTradingService.MAX_SCAN_BLOCKS_PER_TICK) {
+        const clampedFrom = Math.max(currentBlock - CopyTradingService.MAX_SCAN_BLOCKS_PER_TICK, 0);
+        pushLog?.(
+          `Copy trade: large lag (${lag} blocks), clamping window to ${clampedFrom} -> ${currentBlock}`
+        );
+        fromBlock = clampedFrom;
       }
 
       pushLog?.(`Copy trade: scanning blocks ${fromBlock} -> ${currentBlock} for ${target.slice(0, 12)}...`);
