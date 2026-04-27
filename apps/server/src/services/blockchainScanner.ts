@@ -53,14 +53,23 @@ export class BlockchainScanner {
     for (let start = fromBlock; start <= toBlock; start += BATCH_SIZE) {
       const end = Math.min(start + BATCH_SIZE - 1, toBlock);
       // Sequential requests + tiny delay keep us below low-tier RPC throughput limits.
-      const logsTo = await this.fetchLogs(start, end, [TRANSFER_SINGLE_TOPIC, null, null, paddedWallet]);
+      const logsSingleTo = await this.fetchLogs(start, end, [TRANSFER_SINGLE_TOPIC, null, null, paddedWallet]);
       await this.sleep(BETWEEN_REQUESTS_DELAY_MS);
-      const logsFrom = await this.fetchLogs(start, end, [TRANSFER_SINGLE_TOPIC, null, paddedWallet, null]);
+      const logsSingleFrom = await this.fetchLogs(start, end, [TRANSFER_SINGLE_TOPIC, null, paddedWallet, null]);
+      await this.sleep(BETWEEN_REQUESTS_DELAY_MS);
+      const logsBatchTo = await this.fetchLogs(start, end, [TRANSFER_BATCH_TOPIC, null, null, paddedWallet]);
+      await this.sleep(BETWEEN_REQUESTS_DELAY_MS);
+      const logsBatchFrom = await this.fetchLogs(start, end, [TRANSFER_BATCH_TOPIC, null, paddedWallet, null]);
       await this.sleep(BETWEEN_REQUESTS_DELAY_MS);
 
-      for (const log of [...logsTo, ...logsFrom]) {
+      for (const log of [...logsSingleTo, ...logsSingleFrom]) {
         const decoded = this.decodeTransferSingle(log);
         if (decoded) transfers.push(decoded);
+      }
+
+      for (const log of [...logsBatchTo, ...logsBatchFrom]) {
+        const decodedBatch = this.decodeTransferBatch(log);
+        transfers.push(...decodedBatch);
       }
     }
 
@@ -145,6 +154,52 @@ export class BlockchainScanner {
       };
     } catch {
       return null;
+    }
+  }
+
+  private decodeTransferBatch(log: any): Erc1155Transfer[] {
+    try {
+      const topics = log.topics as string[];
+      const data = (log.data as string).replace(/^0x/, "");
+      if (!data || data.length < 256) return [];
+
+      const from = "0x" + topics[2].slice(26).toLowerCase();
+      const to = "0x" + topics[3].slice(26).toLowerCase();
+
+      // ABI dynamic params in bytes (without 0x): [offset_ids, offset_values, ...]
+      const offsetIdsBytes = Number(BigInt("0x" + data.slice(0, 64)));
+      const offsetValuesBytes = Number(BigInt("0x" + data.slice(64, 128)));
+      const idsStart = offsetIdsBytes * 2;
+      const valuesStart = offsetValuesBytes * 2;
+
+      if (idsStart + 64 > data.length || valuesStart + 64 > data.length) return [];
+
+      const idsLen = Number(BigInt("0x" + data.slice(idsStart, idsStart + 64)));
+      const valuesLen = Number(BigInt("0x" + data.slice(valuesStart, valuesStart + 64)));
+      if (idsLen <= 0 || valuesLen <= 0 || idsLen !== valuesLen) return [];
+
+      const result: Erc1155Transfer[] = [];
+      for (let i = 0; i < idsLen; i++) {
+        const idPos = idsStart + 64 + i * 64;
+        const valPos = valuesStart + 64 + i * 64;
+        if (idPos + 64 > data.length || valPos + 64 > data.length) break;
+
+        const tokenId = BigInt("0x" + data.slice(idPos, idPos + 64)).toString();
+        const value = BigInt("0x" + data.slice(valPos, valPos + 64)).toString();
+        result.push({
+          blockNumber: parseInt(log.blockNumber, 16),
+          txHash: log.transactionHash,
+          from,
+          to,
+          tokenId,
+          value,
+          isBatch: true
+        });
+      }
+
+      return result;
+    } catch {
+      return [];
     }
   }
 }
