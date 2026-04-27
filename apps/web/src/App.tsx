@@ -25,6 +25,7 @@ const defaultState: BotState = {
   copiedPositionKeys: [],
   logs: [],
   accountBalanceUsd: null,
+  portfolioValueUsd: null,
   lastPolymarketError: null
 };
 
@@ -45,7 +46,10 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
 
-  const exposure = useMemo(() => state.openPositions.reduce((acc, p) => acc + p.amountUsd, 0), [state.openPositions]);
+  const exposure = useMemo(() => {
+    if (state.portfolioValueUsd !== null) return state.portfolioValueUsd;
+    return state.openPositions.reduce((acc, p) => acc + p.amountUsd, 0);
+  }, [state.openPositions, state.portfolioValueUsd]);
 
   const loadState = async () => {
     try {
