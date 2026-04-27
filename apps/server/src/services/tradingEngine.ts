@@ -154,8 +154,14 @@ export class TradingEngine {
     }
 
     for (const instruction of instructions) {
+      const isSell = instruction.direction === "SELL";
+      if (isSell && !this.hasOpenPosition(instruction)) {
+        this.pushLog(`Skipped ${instruction.source} SELL for ${instruction.marketId}: no local position to close.`);
+        continue;
+      }
+
       const currentExposure = this.state.openPositions.reduce((acc, p) => acc + p.amountUsd, 0);
-      if (currentExposure + instruction.amountUsd > this.state.settings.maxExposureUsd) {
+      if (!isSell && currentExposure + instruction.amountUsd > this.state.settings.maxExposureUsd) {
         this.pushLog(`Skipped ${instruction.source} order for ${instruction.marketId}: exposure limit.`);
         continue;
       }
@@ -163,15 +169,19 @@ export class TradingEngine {
       try {
         const result = await this.polymarketClient.placeOrder(instruction, this.state.settings);
         if (result.ok) {
-          this.state.openPositions.push({
-            marketId: instruction.marketId,
-            outcome: instruction.outcome,
-            side: instruction.side,
-            amountUsd: instruction.amountUsd,
-            price: 0.5,
-            timestamp: new Date().toISOString(),
-            source: instruction.source
-          });
+          if (isSell) {
+            this.reduceOpenPosition(instruction);
+          } else {
+            this.state.openPositions.push({
+              marketId: instruction.marketId,
+              outcome: instruction.outcome,
+              side: instruction.side,
+              amountUsd: instruction.amountUsd,
+              price: 0.5,
+              timestamp: new Date().toISOString(),
+              source: instruction.source
+            });
+          }
           this.pushLog(`[${result.mode}] ${instruction.source} ${instruction.side} ${instruction.outcome} in ${instruction.marketId} for $${instruction.amountUsd}. ${instruction.reason}`);
         }
       } catch (error) {
@@ -189,5 +199,29 @@ export class TradingEngine {
       lastPolymarketError: null,
       logs: []
     });
+  }
+
+  private reduceOpenPosition(instruction: TradeInstruction): void {
+    const candidate = this.state.openPositions
+      .filter((p) => p.marketId === instruction.marketId && p.outcome === instruction.outcome)
+      .sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp))[0];
+
+    if (!candidate) {
+      return;
+    }
+
+    const nextAmount = Math.max(0, candidate.amountUsd - instruction.amountUsd);
+    if (nextAmount === 0) {
+      this.state.openPositions = this.state.openPositions.filter((p) => p !== candidate);
+      return;
+    }
+
+    candidate.amountUsd = nextAmount;
+  }
+
+  private hasOpenPosition(instruction: TradeInstruction): boolean {
+    return this.state.openPositions.some(
+      (p) => p.marketId === instruction.marketId && p.outcome === instruction.outcome && p.amountUsd > 0
+    );
   }
 }

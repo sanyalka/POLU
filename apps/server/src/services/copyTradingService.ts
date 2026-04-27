@@ -1,7 +1,7 @@
 import { BlockchainScanner, Erc1155Transfer } from "./blockchainScanner.js";
 import { GoldskyClient } from "./goldskyClient.js";
 import { GammaClient } from "./gammaClient.js";
-import { BotState, TradeInstruction, Side } from "../types.js";
+import { BotState, TradeInstruction } from "../types.js";
 
 export interface CopyTradingLog {
   message: string;
@@ -60,12 +60,9 @@ export class CopyTradingService {
           this.processedTxs.add(txKey);
 
           // Determine direction: target wallet receiving = BUY, sending = SELL
-          let side: Side;
-          if (tx.to.toLowerCase() === target) {
-            side = "YES";
-          } else if (tx.from.toLowerCase() === target) {
-            side = "NO";
-          } else {
+          const isBuy = tx.to.toLowerCase() === target;
+          const isSell = tx.from.toLowerCase() === target;
+          if (!isBuy && !isSell) {
             continue;
           }
 
@@ -95,20 +92,21 @@ export class CopyTradingService {
           }
           state.ignoredTradeIds.push(tradeId);
 
-          const copyKey = `${conditionId}:${outcome}:${side}`;
-          if (state.copiedPositionKeys.includes(copyKey)) {
-            continue;
-          }
+          const direction: "BUY" | "SELL" = isBuy ? "BUY" : "SELL";
 
-          const isBuy = tx.to.toLowerCase() === target;
-          if (!isBuy) {
-            pushLog?.(`Copy trade: skipping SELL of ${outcome} in ${market.question.slice(0, 40)}`);
-            continue;
-          }
-
-          // Calculate amount: ERC1155 value is in 1e6 (USDC decimals), representing number of shares
+          // ERC1155 value is in 1e6 and represents shares count.
           const shareCount = Number(tx.value) / 1_000_000;
-          const amountUsd = Math.min(shareCount, state.settings.copyAmountUsd);
+          const priceSide = direction === "BUY" ? "buy" : "sell";
+          const estimatedPrice = tx.tokenId && this.polymarketClient?.getBookPrice
+            ? await this.polymarketClient.getBookPrice(tx.tokenId, priceSide)
+            : null;
+          const estimatedUsd = shareCount * (estimatedPrice ?? 1);
+          const amountUsd = Math.min(estimatedUsd, state.settings.copyAmountUsd);
+
+          if (amountUsd < 0.1) {
+            pushLog?.(`Copy trade: skip tiny ${direction} for ${outcome} (estimated $${amountUsd.toFixed(4)})`);
+            continue;
+          }
 
           instructions.push({
             marketId: conditionId,
@@ -116,11 +114,10 @@ export class CopyTradingService {
             side: outcome, // YES or NO
             amountUsd,
             tokenId: tx.tokenId,
-            direction: isBuy ? "BUY" : "SELL",
-            reason: `Copy ${outcome} ${isBuy ? "BUY" : "SELL"} from ${target.slice(0, 12)}... in "${market.question.slice(0, 50)}"`,
+            direction,
+            reason: `Copy ${outcome} ${direction} from ${target.slice(0, 12)}... in "${market.question.slice(0, 50)}"`,
             source: "COPY"
           });
-          state.copiedPositionKeys.push(copyKey);
 
           pushLog?.(`Copy trade: detected ${outcome} ${isBuy ? "BUY" : "SELL"} in "${market.question.slice(0, 50)}" amount=$${amountUsd.toFixed(2)}`);
         } catch (txErr) {
