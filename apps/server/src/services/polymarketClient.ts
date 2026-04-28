@@ -160,17 +160,29 @@ export class PolymarketClient {
   }
 
   async getBookPrice(tokenId: string, side: "buy" | "sell"): Promise<number | null> {
-    try {
-      const url = new URL(`${env.POLYMARKET_API_URL}/book`);
-      url.searchParams.set("token_id", tokenId);
-      url.searchParams.set("side", side);
-      const response = await fetch(url);
-      if (!response.ok) return null;
-      const data = await response.json() as { bids?: Array<{price:string}>; asks?: Array<{price:string}> };
-      const price = side === "buy" 
+    const parseBestPrice = (data: { bids?: Array<{ price: string }>; asks?: Array<{ price: string }> }): number | null => {
+      const rawPrice = side === "buy"
         ? (data.asks?.[0]?.price ?? data.bids?.[0]?.price)
         : (data.bids?.[0]?.price ?? data.asks?.[0]?.price);
-      return price ? Number(price) : null;
+      const parsed = rawPrice ? Number(rawPrice) : NaN;
+      return Number.isFinite(parsed) ? parsed : null;
+    };
+
+    const tryFetch = async (paramName: "token_id" | "asset_id"): Promise<number | null> => {
+      const url = new URL(`${env.POLYMARKET_API_URL}/book`);
+      url.searchParams.set(paramName, tokenId);
+      const response = await fetch(url);
+      if (!response.ok) return null;
+      const data = await response.json() as { bids?: Array<{ price: string }>; asks?: Array<{ price: string }> };
+      return parseBestPrice(data);
+    };
+
+    try {
+      // CLOB API may change accepted query key; support both token_id and asset_id.
+      const byTokenId = await tryFetch("token_id");
+      if (byTokenId !== null) return byTokenId;
+
+      return await tryFetch("asset_id");
     } catch {
       return null;
     }
