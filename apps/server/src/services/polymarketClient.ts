@@ -29,6 +29,21 @@ export class PolymarketClient {
   private derivedCreds?: ApiCreds;
   private wallet?: any;
   private allowancesChecked = false;
+  private clobImportHint: "v2" | "v1" | null = null;
+
+  private async loadClobModule(): Promise<any> {
+    try {
+      const v2Package = "@polymarket/clob-client-v2";
+      const mod = await import(v2Package);
+      this.clobImportHint = "v2";
+      return mod;
+    } catch {
+      const v1Package = "@polymarket/clob-client";
+      const mod = await import(v1Package);
+      this.clobImportHint = "v1";
+      return mod;
+    }
+  }
 
   private authHeaders(): Record<string, string> {
     const headers: Record<string, string> = {};
@@ -120,8 +135,7 @@ export class PolymarketClient {
     }
 
     try {
-      // @ts-ignore optional dependency
-      const { ClobClient } = await import("@polymarket/clob-client");
+      const { ClobClient } = await this.loadClobModule();
       // @ts-ignore optional dependency
       const { Wallet, JsonRpcProvider } = await import("ethers");
 
@@ -354,8 +368,7 @@ export class PolymarketClient {
     }
 
     // Import Side enum from clob-client
-    // @ts-ignore optional dependency
-    const { Side } = await import("@polymarket/clob-client");
+    const { Side } = await this.loadClobModule();
 
     const userOrder = {
       tokenID: instruction.tokenId,
@@ -384,6 +397,11 @@ export class PolymarketClient {
       };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("order_version_mismatch") && this.clobImportHint === "v1") {
+        throw new Error(
+          "LIVE order failed: order_version_mismatch. Polymarket CLOB V2 requires @polymarket/clob-client-v2; current runtime is using legacy @polymarket/clob-client."
+        );
+      }
       throw new Error(`LIVE order failed: ${msg}`);
     }
   }
