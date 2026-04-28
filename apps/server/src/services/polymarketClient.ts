@@ -363,7 +363,11 @@ export class PolymarketClient {
     return this.tryCreateSdkBalanceClient(settings);
   }
 
-  async placeOrder(instruction: TradeInstruction, settings: BotSettings): Promise<PlaceOrderResult> {
+  async placeOrder(
+    instruction: TradeInstruction,
+    settings: BotSettings,
+    allowEnvAuthRetry = true
+  ): Promise<PlaceOrderResult> {
     if (settings.executionMode === "SIMULATION") {
       return {
         ok: true,
@@ -460,6 +464,23 @@ export class PolymarketClient {
             status: recovered?.status ?? "unknown",
             raw: JSON.stringify(recovered, null, 2)
           };
+        }
+      }
+      if (msg.includes("order_version_mismatch") && allowEnvAuthRetry) {
+        const envSignatureType = env.POLYMARKET_SIGNATURE_TYPE as 0 | 1 | 2;
+        const envFunder = env.POLYMARKET_PROXY_ADDRESS ?? "";
+        const authDiffersFromEnv =
+          settings.signatureType !== envSignatureType || (settings.funder || "") !== envFunder;
+        if (authDiffersFromEnv) {
+          return this.placeOrder(
+            instruction,
+            {
+              ...settings,
+              signatureType: envSignatureType,
+              funder: envFunder
+            },
+            false
+          );
         }
       }
       if (msg.includes("order_version_mismatch") && this.clobImportHint === "v1") {
