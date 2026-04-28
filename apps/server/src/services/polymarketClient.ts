@@ -11,6 +11,13 @@ interface PlaceOrderResult {
 }
 
 type ApiCreds = { key: string; secret: string; passphrase: string };
+type OrderBookResponse = {
+  bids?: Array<{ price: string }>;
+  asks?: Array<{ price: string }>;
+  tick_size?: string;
+  neg_risk?: boolean;
+  min_order_size?: string;
+};
 
 const USDC = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174";
 const EXCHANGE = "0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E";
@@ -159,18 +166,34 @@ export class PolymarketClient {
 
   }
 
-  async getBookPrice(tokenId: string, side: "buy" | "sell"): Promise<number | null> {
-    try {
+  private async getBook(tokenId: string): Promise<OrderBookResponse | null> {
+    const tryFetch = async (paramName: "token_id" | "asset_id"): Promise<OrderBookResponse | null> => {
       const url = new URL(`${env.POLYMARKET_API_URL}/book`);
-      url.searchParams.set("token_id", tokenId);
-      url.searchParams.set("side", side);
+      url.searchParams.set(paramName, tokenId);
       const response = await fetch(url);
       if (!response.ok) return null;
-      const data = await response.json() as { bids?: Array<{price:string}>; asks?: Array<{price:string}> };
-      const price = side === "buy" 
+      return (await response.json()) as OrderBookResponse;
+    };
+
+    const byTokenId = await tryFetch("token_id");
+    if (byTokenId) return byTokenId;
+    return tryFetch("asset_id");
+  }
+
+  async getBookPrice(tokenId: string, side: "buy" | "sell"): Promise<number | null> {
+    const parseBestPrice = (data: { bids?: Array<{ price: string }>; asks?: Array<{ price: string }> }): number | null => {
+      const rawPrice = side === "buy"
         ? (data.asks?.[0]?.price ?? data.bids?.[0]?.price)
         : (data.bids?.[0]?.price ?? data.asks?.[0]?.price);
-      return price ? Number(price) : null;
+      const parsed = rawPrice ? Number(rawPrice) : NaN;
+      return Number.isFinite(parsed) ? parsed : null;
+    };
+
+    try {
+      // CLOB API may change accepted query key; support both token_id and asset_id.
+      const book = await this.getBook(tokenId);
+      if (!book) return null;
+      return parseBestPrice(book);
     } catch {
       return null;
     }
@@ -307,9 +330,14 @@ export class PolymarketClient {
       await this.ensureAllowances(funder);
     }
 
-    // Get best price from CLOB book
+    // Get best price from CLOB book + market params required for correct order version/signing
     const bookSide = instruction.direction === "BUY" ? "buy" : "sell";
-    const price = await this.getBookPrice(instruction.tokenId, bookSide);
+    const book = await this.getBook(instruction.tokenId);
+    const rawPrice = bookSide === "buy"
+      ? (book?.asks?.[0]?.price ?? book?.bids?.[0]?.price)
+      : (book?.bids?.[0]?.price ?? book?.asks?.[0]?.price);
+    const parsedPrice = rawPrice ? Number(rawPrice) : NaN;
+    const price = Number.isFinite(parsedPrice) ? parsedPrice : null;
     if (price === null) {
       throw new Error("LIVE order failed: could not fetch book price");
     }
@@ -337,7 +365,11 @@ export class PolymarketClient {
     };
 
     try {
-      const signedOrder = await client.createOrder(userOrder);
+      const createOrderOptions = {
+        tickSize: book?.tick_size,
+        negRisk: book?.neg_risk
+      };
+      const signedOrder = await client.createOrder(userOrder, createOrderOptions);
       const result = await client.postOrder(signedOrder);
       const raw = JSON.stringify(result, null, 2);
       if (result && result.success === false) {
