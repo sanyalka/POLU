@@ -23,6 +23,8 @@ const USDC = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174";
 const EXCHANGE = "0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E";
 const NEG_RISK_EXCHANGE = "0xC5d563A36AE78145C45a50134d48A1215220f80a";
 const CTF = "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045";
+const V2_EXCHANGE = "0xE111180000d2663C0091e4f400237545B87B996B";
+const V2_NEG_RISK_EXCHANGE = "0xe2222d279d744050d28e00520010520000310F59";
 
 export class PolymarketClient {
   private readonly scanner = new BlockchainScanner();
@@ -192,6 +194,50 @@ export class PolymarketClient {
     const byTokenId = await tryFetch("token_id");
     if (byTokenId) return byTokenId;
     return tryFetch("asset_id");
+  }
+
+  private async tryLegacySdkV2AddressFallback(params: {
+    client: any;
+    instruction: TradeInstruction;
+    settings: BotSettings;
+    price: number;
+    size: number;
+    book: OrderBookResponse | null;
+  }): Promise<any | null> {
+    if (!this.wallet || this.clobImportHint !== "v1") return null;
+
+    try {
+      const helpersPackage = "@polymarket/clob-client/dist/order-builder/helpers.js";
+      const helperMod = await import(helpersPackage);
+      const tickSize = params.book?.tick_size ?? "0.01";
+      const roundConfig = helperMod.ROUNDING_CONFIG?.[tickSize] ?? helperMod.ROUNDING_CONFIG?.["0.01"];
+      if (!roundConfig) return null;
+
+      const signerAddress = await this.wallet.getAddress();
+      const signatureType = params.settings.signatureType;
+      const maker = signatureType === 0
+        ? signerAddress
+        : (params.settings.funder || env.POLYMARKET_PROXY_ADDRESS || signerAddress);
+
+      const orderData = await helperMod.buildOrderCreationArgs(
+        signerAddress,
+        maker,
+        signatureType,
+        {
+          tokenID: params.instruction.tokenId,
+          price: params.price,
+          size: params.size,
+          side: params.instruction.direction
+        },
+        roundConfig
+      );
+
+      const exchangeAddress = params.book?.neg_risk ? V2_NEG_RISK_EXCHANGE : V2_EXCHANGE;
+      const signedOrder = await helperMod.buildOrder(this.wallet, exchangeAddress, env.POLYGON_CHAIN_ID, orderData);
+      return await params.client.postOrder(signedOrder);
+    } catch {
+      return null;
+    }
   }
 
   async getBookPrice(tokenId: string, side: "buy" | "sell"): Promise<number | null> {
@@ -398,8 +444,27 @@ export class PolymarketClient {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes("order_version_mismatch") && this.clobImportHint === "v1") {
+        const recovered = await this.tryLegacySdkV2AddressFallback({
+          client,
+          instruction,
+          settings,
+          price,
+          size,
+          book
+        });
+        if (recovered && recovered.success !== false) {
+          return {
+            ok: true,
+            orderId: recovered?.orderID ?? recovered?.id ?? `live-${Date.now()}`,
+            mode: "LIVE",
+            status: recovered?.status ?? "unknown",
+            raw: JSON.stringify(recovered, null, 2)
+          };
+        }
+      }
+      if (msg.includes("order_version_mismatch") && this.clobImportHint === "v1") {
         throw new Error(
-          "LIVE order failed: order_version_mismatch. Polymarket CLOB V2 requires @polymarket/clob-client-v2; current runtime is using legacy @polymarket/clob-client."
+          "LIVE order failed: order_version_mismatch. Attempted legacy fallback with V2 exchange addresses, but order was still rejected. Install/use @polymarket/clob-client-v2 runtime."
         );
       }
       throw new Error(`LIVE order failed: ${msg}`);
